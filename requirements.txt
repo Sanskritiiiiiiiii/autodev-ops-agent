@@ -1,0 +1,9 @@
+fastapi>=0.110
+uvicorn>=0.29
+psycopg2-binary>=2.9
+pgvector>=0.2.5
+rank-bm25>=0.2.2
+tree-sitter>=0.21
+langgraph>=0.2
+rich>=13.7
+redis>=5.0
