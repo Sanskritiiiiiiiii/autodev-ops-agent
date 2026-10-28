@@ -9,3 +9,4 @@ rich>=13.7
 redis>=5.0
 sentence-transformers>=3.0
 torch>=2.2
+groq>=0.9
