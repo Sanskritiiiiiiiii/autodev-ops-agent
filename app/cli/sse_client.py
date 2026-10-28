@@ -15,21 +15,26 @@ class SseEvent:
     data: str
 
 
-def submit_job(api_url: str, repo_name: str, log: str, timeout: float = 10.0) -> str:
+def submit_job(api_url: str, repo_name: str, log: str, timeout: float = 10.0,
+               api_key: str | None = None) -> str:
     body = json.dumps({"repo_name": repo_name, "log": log}).encode()
-    req = urllib.request.Request(
-        f"{api_url}/api/v1/triage/submit", data=body, method="POST",
-        headers={"Content-Type": "application/json"},
-    )
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["X-API-Key"] = api_key
+    req = urllib.request.Request(f"{api_url}/api/v1/triage/submit", data=body, method="POST",
+                                 headers=headers)
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return json.loads(resp.read())["job_id"]
 
 
-def iter_sse(url: str, last_event_id: str | None = None, timeout: float = 60.0):
+def iter_sse(url: str, last_event_id: str | None = None, timeout: float = 60.0,
+             api_key: str | None = None):
     """Yield SseEvent objects from one SSE connection until the server closes it."""
     headers = {"Accept": "text/event-stream"}
     if last_event_id:
         headers["Last-Event-ID"] = last_event_id
+    if api_key:
+        headers["X-API-Key"] = api_key
     req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         ev_id, ev_type, data_lines = None, "message", []
@@ -54,15 +59,16 @@ def iter_sse(url: str, last_event_id: str | None = None, timeout: float = 60.0):
 
 
 def stream_job(api_url: str, job_id: str, max_reconnects: int = 3,
-               retry_delay: float = 1.0, read_timeout: float = 60.0):
+               retry_delay: float = 1.0, read_timeout: float = 60.0,
+               api_key: str | None = None):
     """Yield a job's events; reconnect with Last-Event-ID if the connection drops.
-    Stops after a terminal event. HTTP errors (404, 400) are raised, not retried."""
+    Stops after a terminal event. HTTP errors (401, 404, 400) are raised, not retried."""
     url = f"{api_url}/api/v1/triage/stream/{job_id}"
     last_id: str | None = None
     failures = 0
     while True:
         try:
-            for ev in iter_sse(url, last_id, read_timeout):
+            for ev in iter_sse(url, last_id, read_timeout, api_key):
                 failures = 0
                 if ev.id:
                     last_id = ev.id

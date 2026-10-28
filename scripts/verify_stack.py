@@ -19,6 +19,7 @@ API = os.environ.get("API_URL", "http://127.0.0.1:8000")
 PG_PORT = int(os.environ.get("POSTGRES_HOST_PORT", "5433"))
 PG_PASSWORD = os.environ.get("POSTGRES_PASSWORD")
 PATCH_HOST_DIR = Path(os.environ.get("PATCHES_HOST_DIR", str(ROOT / "patches")))
+API_KEY = os.environ.get("AUTODEV_API_KEY")
 failures: list[str] = []
 
 
@@ -61,9 +62,9 @@ check("redis AOF persistence is on", r.config_get("appendonly").get("appendonly"
 
 # ---- one real job through the containers ----
 log = (ROOT / "scripts" / "sample_error.log").read_text(encoding="utf-8")
-job_id = submit_job(API, "sample_repo", log)
+job_id = submit_job(API, "sample_repo", log, api_key=API_KEY)
 print(f"       submitted job {job_id}; waiting for the worker (real Groq call)...")
-events = list(stream_job(API, job_id, read_timeout=90))
+events = list(stream_job(API, job_id, read_timeout=90, api_key=API_KEY))
 types = [e.event for e in events]
 check("SSE stream through the API container ends with job_completed",
       types and types[0] == "job_started" and types[-1] == "job_completed", str(types))

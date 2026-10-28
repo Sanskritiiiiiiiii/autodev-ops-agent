@@ -2,14 +2,15 @@ import json
 import re
 import time
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from redis.exceptions import RedisError
 from sse_starlette import EventSourceResponse
 
+from app.api.auth import require_api_key
 from app.queue.events import TERMINAL_TYPES, events_key
 from app.queue.jobs import job_key
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_api_key)])
 
 BLOCK_MS = 5000
 IDLE_TIMEOUT_S = 900.0

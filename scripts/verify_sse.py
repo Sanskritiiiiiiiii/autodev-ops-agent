@@ -1,4 +1,5 @@
 """Module 6B verification: SSE endpoint, SSE client, Rich renderer."""
+import os
 import asyncio
 import http.server
 import io
@@ -16,6 +17,7 @@ import uvicorn
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+os.environ.pop("AUTODEV_API_KEY", None)  # the in-process test server runs unauthenticated
 
 from rich.console import Console  # noqa: E402
 

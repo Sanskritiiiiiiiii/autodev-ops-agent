@@ -20,6 +20,8 @@ API = os.environ.get("API_URL", "http://localhost:8000")
 URL = f"{API}/api/v1/triage/submit"
 failures: list[str] = []
 
+API_KEY = os.environ.get("AUTODEV_API_KEY")
+
 
 def check(name: str, cond: bool, detail: str = "") -> None:
     print(f"[{'PASS' if cond else 'FAIL'}] {name}" + (f"  {detail}" if detail and not cond else ""))
@@ -28,8 +30,10 @@ def check(name: str, cond: bool, detail: str = "") -> None:
 
 
 def post(raw: bytes) -> tuple[int, dict | None]:
-    req = urllib.request.Request(URL, data=raw, method="POST",
-                                 headers={"Content-Type": "application/json"})
+    headers = {"Content-Type": "application/json"}
+    if API_KEY:
+        headers["X-API-Key"] = API_KEY
+    req = urllib.request.Request(URL, data=raw, method="POST", headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             return resp.status, json.loads(resp.read())
