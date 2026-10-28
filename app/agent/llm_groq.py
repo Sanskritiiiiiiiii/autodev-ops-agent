@@ -44,7 +44,8 @@ def _nonempty(value) -> bool:
 
 
 class GroqLLM:
-    """LLM protocol implementation over an OpenAI-compatible chat client."""
+    """The adapter the graph uses. Wraps an OpenAI-compatible client; exposes
+    analyze() and draft_fix() (the LLM protocol in app/agent/state.py)."""
 
     def __init__(self, client, model: str, max_tokens: int = 3000):
         self.client = client
@@ -90,6 +91,8 @@ class GroqLLM:
 
 
 def make_groq_llm() -> GroqLLM:
+    """Build the adapter from environment variables. Returns a GroqLLM,
+    never a raw client or a tuple."""
     api_key = os.environ.get("GROQ_API_KEY")
     model = os.environ.get("GROQ_MODEL")
     if not api_key:
@@ -98,4 +101,5 @@ def make_groq_llm() -> GroqLLM:
         raise RuntimeError("GROQ_MODEL is not set (choose a tool-calling model from the Groq docs)")
     from groq import Groq  # imported lazily so offline tests don't need the package
 
-    return GroqLLM(Groq(api_key=api_key), model)
+    client = Groq(api_key=api_key, timeout=60.0, max_retries=2)
+    return GroqLLM(client, model)

@@ -7,6 +7,7 @@ from redis.exceptions import RedisError, ResponseError
 
 from app.config import CONSUMER_GROUP, STREAM_KEY
 from app.queue.jobs import job_key
+from app.queue.errors import PermanentJobError
 
 log = logging.getLogger("autodev.worker")
 
@@ -114,7 +115,7 @@ class Worker:
             await asyncio.wait_for(self.handler(job_id, job), timeout=self.job_timeout_s)
         except Exception as exc:  # handler error or timeout; CancelledError is not caught
             error = repr(exc)
-            if attempt >= self.max_deliveries:
+            if isinstance(exc, PermanentJobError) or attempt >= self.max_deliveries:
                 log.error("job %s failed permanently: %s", job_id, error)
                 await self.redis.hset(key, mapping={
                     "status": "failed", "finished_at": _now(), "error": error,

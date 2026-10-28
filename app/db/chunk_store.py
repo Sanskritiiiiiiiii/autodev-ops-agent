@@ -118,3 +118,8 @@ def search_by_vector(conn, repo_name: str, query_vec, top_k: int = 5) -> list[tu
             score = float(d.pop("score"))
             out.append((d, score))
         return out
+
+def count_chunks(conn, repo_name: str) -> int:
+    with conn.cursor() as cur:
+        cur.execute("SELECT count(*) FROM code_chunks WHERE repo_name = %s", (repo_name,))
+        return cur.fetchone()[0]
