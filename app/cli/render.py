@@ -75,7 +75,8 @@ class EventRenderer:
         c = self.console
         if not result:
             c.print(Text("Job completed (no result stored).", style="bold"))
-        elif result.get("evaluation_status") == "passed":
+            return
+        if result.get("evaluation_status") == "passed":
             c.print(Panel(Text(f"Verified fix found in {result['attempts']} attempt(s).", style="bold green"),
                           title="Result", border_style="green"))
         else:
@@ -83,3 +84,8 @@ class EventRenderer:
                 (f"No verified fix after {result.get('attempts')} attempt(s).\n", "bold red"),
                 str(result.get("verification_feedback") or "")),
                 title="Result", border_style="red"))
+        if result.get("patch_path"):
+            c.print(Text.assemble(("Patch file: ", "bold"), result["patch_path"]))
+            c.print(Text.assemble(("Apply it with: ", "bold"), f"git apply {result['patch_path']}"))
+        elif result.get("patch_error"):
+            c.print(Text(f"Patch could not be generated: {result['patch_error']}", style="yellow"))
