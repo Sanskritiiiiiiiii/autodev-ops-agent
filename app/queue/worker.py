@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import time
 from datetime import datetime, timezone
@@ -6,8 +7,9 @@ from datetime import datetime, timezone
 from redis.exceptions import RedisError, ResponseError
 
 from app.config import CONSUMER_GROUP, STREAM_KEY
-from app.queue.jobs import job_key
 from app.queue.errors import PermanentJobError
+from app.queue.events import publish_event
+from app.queue.jobs import job_key
 
 log = logging.getLogger("autodev.worker")
 
@@ -90,6 +92,9 @@ class Worker:
     async def _ack(self, msg_id: str) -> None:
         await self.redis.xack(self.stream_key, self.group, msg_id)
 
+    async def _emit(self, job_id: str, event_type: str, data: dict | None = None) -> None:
+        await publish_event(self.redis, job_id, event_type, data)
+
     async def _process(self, msg_id: str, fields: dict) -> None:
         job_id = fields.get("job_id")
         job = await self.redis.hgetall(job_key(job_id)) if job_id else {}
@@ -101,16 +106,18 @@ class Worker:
         key = job_key(job_id)
         attempt = await self._delivery_count(msg_id)
         if attempt > self.max_deliveries:  # worker died during the last attempt
+            error = f"max deliveries ({self.max_deliveries}) exceeded"
             await self.redis.hset(key, mapping={
-                "status": "failed", "finished_at": _now(),
-                "error": f"max deliveries ({self.max_deliveries}) exceeded",
+                "status": "failed", "finished_at": _now(), "error": error,
             })
+            await self._emit(job_id, "job_failed", {"error": error})
             await self._ack(msg_id)
             return
 
         await self.redis.hset(key, mapping={
             "status": "processing", "started_at": _now(), "attempt": str(attempt),
         })
+        await self._emit(job_id, "job_started", {"attempt": attempt})
         try:
             await asyncio.wait_for(self.handler(job_id, job), timeout=self.job_timeout_s)
         except Exception as exc:  # handler error or timeout; CancelledError is not caught
@@ -120,12 +127,17 @@ class Worker:
                 await self.redis.hset(key, mapping={
                     "status": "failed", "finished_at": _now(), "error": error,
                 })
+                await self._emit(job_id, "job_failed", {"error": error})
                 await self._ack(msg_id)
             else:
                 log.warning("job %s attempt %d failed (%s); will retry", job_id, attempt, error)
                 await self.redis.hset(key, mapping={"status": "retrying", "error": error})
+                await self._emit(job_id, "job_retrying", {"attempt": attempt, "error": error})
             return
 
         await self.redis.hset(key, mapping={"status": "completed", "finished_at": _now()})
+        raw_result = await self.redis.hget(key, "result")
+        await self._emit(job_id, "job_completed",
+                         {"result": json.loads(raw_result) if raw_result else None})
         await self._ack(msg_id)
         log.info("job %s completed (attempt %d)", job_id, attempt)

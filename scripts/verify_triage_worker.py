@@ -67,6 +67,7 @@ class ScriptedLLM:
 
     def analyze(self, log: str) -> dict:
         self.analyzed.append(self._marker(log))
+        time.sleep(0.5)  # simulate a slow LLM call: blocks the agent thread, never the event loop
         return {"hypothesis": "Connection pool exhausted.", "search_query": "ERR_DB_TIMEOUT"}
 
     def draft_fix(self, log, hypothesis, chunks, feedback):

@@ -5,6 +5,7 @@ from fastapi import FastAPI, HTTPException, Request, status
 from redis.exceptions import RedisError
 
 from app.api.schemas import TriageSubmitRequest, TriageSubmitResponse
+from app.api.stream import router as stream_router
 from app.config import REDIS_HOST, REDIS_PORT
 from app.queue.jobs import enqueue_job
 
@@ -17,6 +18,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="AutoDev-Ops Agent", lifespan=lifespan)
+app.include_router(stream_router)
 
 
 @app.post(

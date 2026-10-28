@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "shop/orders.py", line 5, in get_order
+    return run_query(pool, f"SELECT * FROM orders WHERE id = {order_id}")
+  File "shop/db.py", line 33, in run_query
+    conn = pool.acquire(timeout=0.5)
+  File "shop/db.py", line 23, in acquire
+    raise DatabaseTimeout(ERR_DB_TIMEOUT)
+shop.db.DatabaseTimeout: ERR_DB_TIMEOUT
