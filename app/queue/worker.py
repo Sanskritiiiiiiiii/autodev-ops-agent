@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from redis.exceptions import RedisError, ResponseError
 
-from app.config import CONSUMER_GROUP, STREAM_KEY
+from app.config import CONSUMER_GROUP, JOB_TTL_S, STREAM_KEY
 from app.queue.errors import PermanentJobError
 from app.queue.events import publish_event
 from app.queue.jobs import job_key
@@ -90,7 +90,9 @@ class Worker:
         return int(info[0]["times_delivered"]) if info else 1
 
     async def _ack(self, msg_id: str) -> None:
+        # Acknowledge, then delete the entry so the stream only holds unprocessed jobs.
         await self.redis.xack(self.stream_key, self.group, msg_id)
+        await self.redis.xdel(self.stream_key, msg_id)
 
     async def _emit(self, job_id: str, event_type: str, data: dict | None = None) -> None:
         await publish_event(self.redis, job_id, event_type, data)
@@ -110,6 +112,7 @@ class Worker:
             await self.redis.hset(key, mapping={
                 "status": "failed", "finished_at": _now(), "error": error,
             })
+            await self.redis.expire(key, JOB_TTL_S)
             await self._emit(job_id, "job_failed", {"error": error})
             await self._ack(msg_id)
             return
@@ -127,6 +130,7 @@ class Worker:
                 await self.redis.hset(key, mapping={
                     "status": "failed", "finished_at": _now(), "error": error,
                 })
+                await self.redis.expire(key, JOB_TTL_S)
                 await self._emit(job_id, "job_failed", {"error": error})
                 await self._ack(msg_id)
             else:
@@ -136,6 +140,7 @@ class Worker:
             return
 
         await self.redis.hset(key, mapping={"status": "completed", "finished_at": _now()})
+        await self.redis.expire(key, JOB_TTL_S)
         raw_result = await self.redis.hget(key, "result")
         await self._emit(job_id, "job_completed",
                          {"result": json.loads(raw_result) if raw_result else None})

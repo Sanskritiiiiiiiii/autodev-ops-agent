@@ -5,3 +5,6 @@ __pycache__/
 pgdata/
 redisdata/
 patches/
+
+.env
+repos/

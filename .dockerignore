@@ -1,0 +1,8 @@
+.venv/
+.git/
+.env
+patches/
+repos/
+sample_repo/
+__pycache__/
+*.pyc

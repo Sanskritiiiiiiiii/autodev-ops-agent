@@ -1,5 +1,6 @@
 import difflib
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 from app.agent.tools import _reindent
@@ -9,6 +10,17 @@ _JOB_ID = re.compile(r"^[A-Za-z0-9_-]+$")
 
 class PatchError(Exception):
     """A patch could not be built safely (stale index, unsupported file, bad path)."""
+
+
+@dataclass(frozen=True)
+class PatchedFile:
+    rel_path: str
+    qualified_name: str
+    start_line: int
+    end_line: int
+    original_text: str
+    new_text: str
+    patch: str
 
 
 def _split_keepends(text: str) -> list[str]:
@@ -25,9 +37,8 @@ def _diff_lines(old: list[str], new: list[str], rel: str):
         yield line if line.endswith("\n") else line + "\n\\ No newline at end of file\n"
 
 
-def build_patch(repo_root: Path, chunk: dict, new_code: str) -> str:
-    """Build a git-style patch replacing the chunk's lines with new_code,
-    computed against the real file on disk."""
+def build_patched_file(repo_root: Path, chunk: dict, new_code: str) -> PatchedFile:
+    """Apply the fix to the real file on disk (in memory) and build its git-style patch."""
     root = Path(repo_root).resolve()
     rel = chunk["file_path"]
     target = (root / rel).resolve()
@@ -64,7 +75,15 @@ def build_patch(repo_root: Path, chunk: dict, new_code: str) -> str:
     new_lines = lines[:start - 1] + new_region + lines[end:]
     if new_lines == lines:
         raise PatchError("the fix produces no change")
-    return f"diff --git a/{rel} b/{rel}\n" + "".join(_diff_lines(lines, new_lines, rel))
+    patch = f"diff --git a/{rel} b/{rel}\n" + "".join(_diff_lines(lines, new_lines, rel))
+    return PatchedFile(
+        rel_path=rel, qualified_name=chunk["qualified_name"], start_line=start, end_line=end,
+        original_text="".join(lines), new_text="".join(new_lines), patch=patch,
+    )
+
+
+def build_patch(repo_root: Path, chunk: dict, new_code: str) -> str:
+    return build_patched_file(repo_root, chunk, new_code).patch
 
 
 def write_patch(patch_dir: Path, job_id: str, patch: str) -> Path:

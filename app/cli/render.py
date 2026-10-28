@@ -89,3 +89,7 @@ class EventRenderer:
             c.print(Text.assemble(("Apply it with: ", "bold"), f"git apply {result['patch_path']}"))
         elif result.get("patch_error"):
             c.print(Text(f"Patch could not be generated: {result['patch_error']}", style="yellow"))
+        if result.get("pr_url"):
+            c.print(Text.assemble(("Draft PR: ", "bold"), result["pr_url"]))
+        elif result.get("pr_error"):
+            c.print(Text(f"Draft PR could not be created: {result['pr_error']}", style="yellow"))

@@ -1,40 +1,87 @@
-version: '3.8'
+name: autodev-ops-agent
+
+x-app: &app
+  image: autodev-ops-agent:local
+  build: .
+  restart: unless-stopped
 
 services:
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: autodev_postgres
-    restart: always
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: autodev
-      POSTGRES_PASSWORD: autodev_pw
-      POSTGRES_DB: autodev
-      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_USER: ${POSTGRES_USER:-autodev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-autodev}
     ports:
-      - "5433:5432"
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
       - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U autodev -d autodev"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-autodev} -d ${POSTGRES_DB:-autodev}"]
       interval: 5s
       timeout: 3s
       retries: 10
 
   redis:
     image: redis:7-alpine
-    container_name: autodev_redis
-    restart: always
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
-      - redisdata:/data
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
 
+  api:
+    <<: *app
+    command: ["uvicorn", "app.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      REDIS_HOST: redis
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/openapi.json', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  worker:
+    <<: *app
+    command: ["python", "-m", "app.queue.run_worker"]
+    environment:
+      REDIS_HOST: redis
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER:-autodev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-autodev}
+      GROQ_API_KEY: ${GROQ_API_KEY:?set GROQ_API_KEY in .env}
+      GROQ_MODEL: ${GROQ_MODEL:?set GROQ_MODEL in .env}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      AUTODEV_GITHUB_REPOS: ${AUTODEV_GITHUB_REPOS:-}
+      AUTODEV_GITHUB_BASE_BRANCH: ${AUTODEV_GITHUB_BASE_BRANCH:-main}
+      AUTODEV_REPOS_DIR: /repos
+      AUTODEV_PATCH_DIR: /data/patches
+    volumes:
+      - ${REPOS_HOST_DIR:-./repos}:/repos:ro
+      - ${PATCHES_HOST_DIR:-./patches}:/data/patches
+      - hf_cache:/models/hf
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
 volumes:
-  pgdata:
-  redisdata:
+  postgres_data:
+  redis_data:
+  hf_cache:
